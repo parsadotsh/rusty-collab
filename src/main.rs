@@ -1,8 +1,25 @@
 use eframe::egui;
 
+mod screen_lobby;
+mod screen_session;
+
+use screen_lobby::render_lobby;
+use screen_session::render_session;
+
 struct App {
-    name: String,
-    age: u32,
+    state: State,
+}
+
+pub enum State {
+    // Initial state, for user to select "New Session" or "Join Existing"
+    Lobby {
+        join_existing: bool,
+        name_input: String,
+    },
+    // Active collaborative editing session
+    Session {
+        doc: String,
+    },
 }
 
 fn main() -> eframe::Result {
@@ -13,8 +30,10 @@ fn main() -> eframe::Result {
         Box::new(|_cc| {
             // Setup
             let app = App {
-                name: String::new(),
-                age: 0,
+                state: State::Lobby {
+                    join_existing: false,
+                    name_input: String::new(),
+                },
             };
             Ok(Box::new(app))
         }),
@@ -30,14 +49,8 @@ impl eframe::App for App {
 }
 
 fn render_ui(ui: &mut egui::Ui, app: &mut App) {
-    ui.heading("Rusty Collab");
-    ui.horizontal(|ui| {
-        ui.label("Your name: ");
-        ui.text_edit_singleline(&mut app.name);
-    });
-    ui.add(egui::Slider::new(&mut app.age, 0..=120).text("age"));
-    if ui.button("Increment").clicked() {
-        app.age += 1;
+    match app.state {
+        State::Lobby { .. } => render_lobby(ui, &mut app.state),
+        State::Session { .. } => render_session(ui, &mut app.state),
     }
-    ui.label(format!("Hello '{}', age {}", app.name, app.age));
 }
