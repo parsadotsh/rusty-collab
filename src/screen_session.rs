@@ -1,12 +1,6 @@
-use std::fmt::Debug;
-
 use eframe::egui::{TextEdit, Ui};
 
-use crate::{
-    App,
-    task_leave_session::task_leave_session,
-    task_start_session::{GossipMessage, SessionState},
-};
+use crate::{App, task_leave_session::task_leave_session, task_start_session::SessionState};
 
 pub fn render_session(ui: &mut Ui, app: App, state: &mut SessionState) {
     if ui.button("Leave Session").clicked() {
@@ -22,11 +16,13 @@ pub fn render_session(ui: &mut Ui, app: App, state: &mut SessionState) {
         }
     });
 
-    let text_edit = TextEdit::multiline(&mut state.doc).show(ui);
+    let doc_text = state.loro_doc.get_text("text");
+    let mut text_content = doc_text.to_string();
+
+    let text_edit = TextEdit::multiline(&mut text_content).show(ui);
 
     if text_edit.response.changed() {
-        let _ = state.outbound_queue.send(GossipMessage::Update {
-            new_doc: state.doc.clone(),
-        });
+        let _ = doc_text.update(&text_content, Default::default());
+        state.loro_doc.commit();
     }
 }

@@ -3,6 +3,7 @@ use std::time::Duration;
 use anyhow::{Result, bail};
 use iroh::{Endpoint, protocol::Router};
 use iroh_gossip::{Gossip, TopicId, api::Event};
+use loro::LoroDoc;
 use tokio::{
     select,
     sync::mpsc::{self, UnboundedSender},
@@ -24,7 +25,8 @@ pub async fn task_start_session(app: App, name: String, existing_peer: Option<St
     app.replace_state(State::Session(session_state));
 }
 pub struct SessionState {
-    pub doc: String,
+    pub loro_doc: LoroDoc,
+    pub loro_sub: loro::Subscription,
     pub iroh_endpoint: Endpoint,
     pub iroh_gossip: Gossip,
     pub iroh_router: Router,
@@ -62,16 +64,28 @@ async fn setup(app: &App, name: String, existing_peer: Option<String>) -> Result
 
     let (outbound_queue, mut outbound_queue_rx) = mpsc::unbounded_channel::<GossipMessage>();
 
+    let loro_doc = LoroDoc::new();
+    let loro_sub = {
+        let outbound_queue = outbound_queue.clone();
+        loro_doc.subscribe_local_update(Box::new(move |bytes| {
+            let _ = outbound_queue.send(GossipMessage::Update {
+                data: bytes.to_vec(),
+            });
+            true
+        }))
+    };
+
     let main_loop_handle: JoinHandle<Result<()>> = tokio::spawn({
         let mut app = app.clone();
         let outbound_queue = outbound_queue.clone();
+        let loro_doc = loro_doc.clone();
         async move {
             loop {
                 select! {
                     Some(event) = gossip_topic.next() => {
                         if let Ok(Event::Received(message)) = event {
                             let (_nonce, gossip_message): (u128, GossipMessage) = wincode::deserialize(&message.content)?;
-                            handle_gossip_message(gossip_message, &mut app, &outbound_queue)?;
+                            handle_gossip_message(gossip_message, &mut app, &loro_doc, &outbound_queue)?;
                         }
                     }
                     Some(message) = outbound_queue_rx.recv() => {
@@ -86,7 +100,8 @@ async fn setup(app: &App, name: String, existing_peer: Option<String>) -> Result
     outbound_queue.send(GossipMessage::RequestData)?;
 
     Ok(SessionState {
-        doc: String::new(),
+        loro_doc,
+        loro_sub,
         iroh_endpoint,
         iroh_gossip,
         iroh_router,
@@ -98,12 +113,13 @@ async fn setup(app: &App, name: String, existing_peer: Option<String>) -> Result
 #[derive(SchemaRead, SchemaWrite)]
 pub enum GossipMessage {
     RequestData,
-    Update { new_doc: String },
+    Update { data: Vec<u8> },
 }
 
 fn handle_gossip_message(
     message: GossipMessage,
     app: &mut App,
+    loro_doc: &LoroDoc,
     outbound_queue: &OutboundQueue,
 ) -> Result<()> {
     let mut state = app.state.lock();
@@ -113,12 +129,11 @@ fn handle_gossip_message(
 
     match message {
         GossipMessage::RequestData => {
-            outbound_queue.send(GossipMessage::Update {
-                new_doc: session_state.doc.clone(),
-            })?;
+            let snapshot = loro_doc.export(loro::ExportMode::Snapshot)?;
+            let _ = outbound_queue.send(GossipMessage::Update { data: snapshot });
         }
-        GossipMessage::Update { new_doc } => {
-            session_state.doc = new_doc;
+        GossipMessage::Update { data } => {
+            loro_doc.import(&data)?;
             app.egui_ctx.request_repaint();
         }
     }

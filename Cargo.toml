@@ -8,6 +8,7 @@ anyhow = "1.0.101"
 eframe = "0.33.3"
 iroh = "0.96.1"
 iroh-gossip = "0.96.0"
+loro = "1.10.3"
 parking_lot = "0.12.5"
 rand = "0.10.0"
 tokio = { version = "1.49.0", features = ["full"] }
