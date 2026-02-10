@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{Result, bail};
 use iroh::{Endpoint, protocol::Router};
 use iroh_gossip::{Gossip, TopicId, api::Event};
@@ -11,10 +13,13 @@ use wincode_derive::{SchemaRead, SchemaWrite};
 
 use crate::{App, State};
 
-pub async fn task_start_session(app: App) {
-    app.replace_state(State::Loading);
+pub async fn task_start_session(app: App, name: String, existing_peer: Option<String>) {
+    let old_state = app.replace_state(State::Loading);
 
-    let session_state = setup(&app).await.unwrap();
+    let Ok(session_state) = setup(&app, name, existing_peer).await else {
+        app.replace_state(old_state);
+        return;
+    };
 
     app.replace_state(State::Session(session_state));
 }
@@ -29,7 +34,7 @@ pub struct SessionState {
 
 type OutboundQueue = UnboundedSender<GossipMessage>;
 
-async fn setup(app: &App) -> Result<SessionState> {
+async fn setup(app: &App, name: String, existing_peer: Option<String>) -> Result<SessionState> {
     const GOSSIP_MAX_MESSAGE_SIZE: usize = 2 * 1024 * 1024;
     const TOPIC_ID_BYTES: [u8; 32] = [23u8; 32];
 
@@ -40,9 +45,21 @@ async fn setup(app: &App) -> Result<SessionState> {
     let iroh_router = Router::builder(iroh_endpoint.clone())
         .accept(iroh_gossip::ALPN, iroh_gossip.clone())
         .spawn();
+
+    let bootstrap_nodes = if let Some(existing_peer) = &existing_peer {
+        vec![existing_peer.parse()?]
+    } else {
+        vec![]
+    };
+
     let mut gossip_topic = iroh_gossip
-        .subscribe(TopicId::from_bytes(TOPIC_ID_BYTES), vec![])
+        .subscribe(TopicId::from_bytes(TOPIC_ID_BYTES), bootstrap_nodes)
         .await?;
+
+    if existing_peer.is_some() {
+        gossip_topic.joined().await?;
+    }
+
     let (outbound_queue, mut outbound_queue_rx) = mpsc::unbounded_channel::<GossipMessage>();
 
     let main_loop_handle: JoinHandle<Result<()>> = tokio::spawn({

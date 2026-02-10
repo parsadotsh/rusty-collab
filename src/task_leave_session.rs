@@ -13,5 +13,6 @@ pub async fn task_leave_session(app: App) {
     app.replace_state(State::Lobby(LobbyState {
         join_existing: false,
         name_input: String::new(),
+        existing_peer_input: String::new(),
     }));
 }

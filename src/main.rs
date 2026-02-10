@@ -48,6 +48,7 @@ async fn main() -> eframe::Result {
                     state: Arc::new(Mutex::new(State::Lobby(LobbyState {
                         join_existing: false,
                         name_input: String::new(),
+                        existing_peer_input: String::new(),
                     }))),
                     egui_ctx: cc.egui_ctx.clone(),
                 };
