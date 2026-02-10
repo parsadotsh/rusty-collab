@@ -16,6 +16,17 @@ pub fn render_session(ui: &mut Ui, app: App, state: &mut SessionState) {
         }
     });
 
+    ui.horizontal(|ui| {
+        let _ = ui.button(format!("Me: {}", state.own_name));
+
+        state
+            .awareness_cache
+            .iter()
+            .for_each(|(_, (awareness, _))| {
+                let _ = ui.button(format!("{}", awareness.name));
+            });
+    });
+
     let doc_text = state.loro_doc.get_text("text");
     let mut text_content = doc_text.to_string();
 

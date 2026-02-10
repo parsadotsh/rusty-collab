@@ -3,6 +3,8 @@ use std::sync::Arc;
 use eframe::egui;
 use parking_lot::Mutex;
 
+mod awareness;
+mod gossip_message;
 mod screen_lobby;
 mod screen_session;
 mod task_leave_session;
