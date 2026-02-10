@@ -143,6 +143,13 @@ pub fn render_session(ui: &mut Ui, app: App, state: &mut SessionState) {
             let doc_text = state.loro_doc.get_text("text");
             let mut text_content = doc_text.to_string();
 
+            let text_edit_id = ui.id().with("text_edit");
+
+            if state.egui_cursors_needs_update {
+                state.egui_cursors_needs_update = false;
+                update_egui_from_loro_cursors(ui, text_edit_id, &state.loro_doc, &state.cursors);
+            }
+
             let output = editor_frame
                 .show(ui, |ui| {
                     let front_layer_id = LayerId::new(ui.layer_id().order, ui.id().with("front"));
@@ -150,6 +157,7 @@ pub fn render_session(ui: &mut Ui, app: App, state: &mut SessionState) {
 
                     ui.scope_builder(UiBuilder::new().layer_id(front_layer_id), |ui| {
                         TextEdit::multiline(&mut text_content)
+                            .id(text_edit_id)
                             .frame(false)
                             .background_color(Color32::TRANSPARENT)
                             .font(egui::FontId::new(18.0, egui::FontFamily::Proportional))
@@ -161,16 +169,13 @@ pub fn render_session(ui: &mut Ui, app: App, state: &mut SessionState) {
                 })
                 .inner;
 
-            render_peer_cursors(ui, &output, &state.awareness_cache, &state.loro_doc);
+            if output.response.changed() {
+                let _ = doc_text.update(&text_content, Default::default());
+                state.loro_doc.commit();
+            }
 
             if state.egui_cursors_needs_update {
                 state.egui_cursors_needs_update = false;
-                update_egui_from_loro_cursors(
-                    ui,
-                    output.response.id,
-                    &state.loro_doc,
-                    &state.cursors,
-                );
             } else {
                 let new_cursors = get_loro_cursors_from_egui(&output, &doc_text);
                 if new_cursors != state.cursors {
@@ -179,10 +184,7 @@ pub fn render_session(ui: &mut Ui, app: App, state: &mut SessionState) {
                 }
             }
 
-            if output.response.changed() {
-                let _ = doc_text.update(&text_content, Default::default());
-                state.loro_doc.commit();
-            }
+            render_peer_cursors(ui, &output, &state.awareness_cache, &state.loro_doc);
         }
     });
 }
