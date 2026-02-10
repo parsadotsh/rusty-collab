@@ -15,6 +15,39 @@ use screen_session::render_session;
 
 use crate::{screen_lobby::LobbyState, task_start_session::SessionState};
 
+fn setup_custom_style(ctx: &egui::Context) {
+    let mut style = (*ctx.style()).clone();
+    
+    // White/light background
+    style.visuals.dark_mode = false;
+    style.visuals.override_text_color = Some(egui::Color32::from_rgb(40, 40, 40));
+    style.visuals.panel_fill = egui::Color32::from_rgb(250, 250, 250);
+    style.visuals.window_fill = egui::Color32::from_rgb(250, 250, 250);
+    style.visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(250, 250, 250);
+    
+    // Better button styling
+    style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(59, 130, 246);
+    style.visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(59, 130, 246);
+    style.visuals.widgets.inactive.fg_stroke.color = egui::Color32::WHITE;
+    style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(37, 99, 235);
+    style.visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(37, 99, 235);
+    style.visuals.widgets.hovered.fg_stroke.color = egui::Color32::WHITE;
+    style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(29, 78, 216);
+    style.visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(29, 78, 216);
+    style.visuals.widgets.active.fg_stroke.color = egui::Color32::WHITE;
+    
+    // Rounded corners
+    style.visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(8);
+    style.visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(8);
+    style.visuals.widgets.active.corner_radius = egui::CornerRadius::same(8);
+    
+    // Spacing
+    style.spacing.button_padding = egui::vec2(16.0, 12.0);
+    style.spacing.item_spacing = egui::vec2(12.0, 16.0);
+    
+    ctx.set_style(style);
+}
+
 #[derive(Clone)]
 struct App {
     state: Arc<Mutex<State>>,
@@ -40,12 +73,18 @@ pub enum State {
 #[tokio::main]
 async fn main() -> eframe::Result {
     tokio::task::block_in_place(|| {
-        let options = eframe::NativeOptions::default();
+        let options = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_inner_size([800.0, 700.0]),
+            ..Default::default()
+        };
         eframe::run_native(
             "Rusty Collab",
             options,
             Box::new(|cc| {
-                // Setup
+                // Setup custom styling
+                setup_custom_style(&cc.egui_ctx);
+                
                 let app = App {
                     state: Arc::new(Mutex::new(State::Lobby(LobbyState {
                         join_existing: false,
@@ -62,9 +101,15 @@ async fn main() -> eframe::Result {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            render_ui(ui, self);
-        });
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgb(250, 250, 250))
+                    .inner_margin(egui::vec2(40.0, 24.0))
+            )
+            .show(ctx, |ui| {
+                render_ui(ui, self);
+            });
     }
 }
 

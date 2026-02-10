@@ -10,65 +10,181 @@ use crate::{
 };
 
 pub fn render_session(ui: &mut Ui, app: App, state: &mut SessionState) {
-    if ui.button("Leave Session").clicked() {
-        tokio::spawn(task_leave_session(app));
-    }
+    ui.vertical_centered(|ui| {
+        // Header with leave button
+        ui.horizontal(|ui| {
+            ui.set_width(ui.available_width());
 
-    ui.horizontal(|ui| {
-        ui.label("My ID:");
-        let id = state.iroh_endpoint.id().to_string();
-        ui.label(&id);
-        if ui.button("📋").clicked() {
-            ui.ctx().copy_text(id);
-        }
-    });
+            ui.label(
+                RichText::new("Collaborative Session")
+                    .size(24.0)
+                    .strong()
+                    .color(egui::Color32::from_rgb(30, 41, 59)),
+            );
 
-    ui.horizontal(|ui| {
-        let text = RichText::new(&state.own_name).color(generate_peer_color(&state.own_id));
-        let _ = ui.button(text);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let leave_button = egui::Button::new(
+                    RichText::new("Leave Session")
+                        .size(14.0)
+                        .color(egui::Color32::WHITE),
+                )
+                .min_size(egui::vec2(120.0, 36.0))
+                .corner_radius(8)
+                .fill(egui::Color32::from_rgb(239, 68, 68));
 
-        state
-            .awareness_cache
-            .iter()
-            .for_each(|(_, (awareness, _))| {
-                let text = RichText::new(&awareness.name)
-                    .color(generate_peer_color(&awareness.endpoint_id));
-                let _ = ui.button(text);
+                if ui.add(leave_button).clicked() {
+                    tokio::spawn(task_leave_session(app));
+                }
             });
-    });
+        });
 
-    let doc_text = state.loro_doc.get_text("text");
-    let mut text_content = doc_text.to_string();
+        ui.add_space(16.0);
 
-    let text_edit = {
-        let front_layer_id = LayerId::new(ui.layer_id().order, ui.id().with("front"));
-        ui.ctx().set_sublayer(ui.layer_id(), front_layer_id);
+        // Peer ID display with copy button
+        ui.horizontal(|ui| {
+            ui.set_width(ui.available_width());
+            ui.set_height(32.0);
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.label(
+                    RichText::new("Your Peer ID:")
+                        .size(14.0)
+                        .color(egui::Color32::from_rgb(71, 85, 105)),
+                );
 
-        ui.scope_builder(UiBuilder::new().layer_id(front_layer_id), |ui| {
-            TextEdit::multiline(&mut text_content)
-                .background_color(Color32::TRANSPARENT)
-                .show(ui)
-        })
-        .inner
-    };
+                let id = state.iroh_endpoint.id().to_string();
+                ui.label(
+                    RichText::new(&id[..id.len().min(32)])
+                        .size(14.0)
+                        .monospace()
+                        .color(egui::Color32::from_rgb(100, 116, 139)),
+                );
 
-    render_peer_cursors(ui, &text_edit, &state.awareness_cache, &state.loro_doc);
+                ui.add_space(8.0);
 
-    if state.egui_cursors_needs_update {
-        state.egui_cursors_needs_update = false;
-        update_egui_from_loro_cursors(ui, text_edit.response.id, &state.loro_doc, &state.cursors);
-    } else {
-        let new_cursors = get_loro_cursors_from_egui(&text_edit, &doc_text);
-        if new_cursors != state.cursors {
-            state.cursors = new_cursors;
-            let _ = broadcast_awareness(state);
+                let copy_button = egui::Button::new(RichText::new("📋 Copy").size(12.0))
+                    .min_size(egui::vec2(80.0, 28.0))
+                    .corner_radius(6);
+
+                if ui.add(copy_button).clicked() {
+                    ui.ctx().copy_text(id);
+                }
+            });
+        });
+
+        ui.add_space(16.0);
+
+        // Active users
+        ui.horizontal(|ui| {
+            ui.set_width(ui.available_width());
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.label(
+                    RichText::new("Active users:")
+                        .size(14.0)
+                        .color(egui::Color32::from_rgb(71, 85, 105)),
+                );
+
+                ui.add_space(8.0);
+
+                // Own user
+                let own_color = generate_peer_color(&state.own_id);
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgba_unmultiplied(
+                        own_color.r(),
+                        own_color.g(),
+                        own_color.b(),
+                        30,
+                    ))
+                    .stroke(egui::Stroke::new(1.0, own_color))
+                    .corner_radius(12)
+                    .inner_margin(egui::vec2(8.0, 2.0))
+                    .show(ui, |ui| {
+                        ui.label(RichText::new(&state.own_name).size(12.0).color(own_color));
+                    });
+
+                // Other peers
+                state
+                    .awareness_cache
+                    .iter()
+                    .for_each(|(_, (awareness, _))| {
+                        ui.add_space(6.0);
+                        let peer_color = generate_peer_color(&awareness.endpoint_id);
+                        egui::Frame::new()
+                            .fill(egui::Color32::from_rgba_unmultiplied(
+                                peer_color.r(),
+                                peer_color.g(),
+                                peer_color.b(),
+                                30,
+                            ))
+                            .stroke(egui::Stroke::new(1.0, peer_color))
+                            .corner_radius(12)
+                            .inner_margin(egui::vec2(8.0, 2.0))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    RichText::new(&awareness.name).size(12.0).color(peer_color),
+                                );
+                            });
+                    });
+            });
+        });
+
+        ui.add_space(24.0);
+
+        // Text editor in a styled frame
+        let editor_frame = egui::Frame::new()
+            .fill(egui::Color32::from_rgb(255, 255, 255))
+            .stroke(egui::Stroke::new(
+                1.0,
+                egui::Color32::from_rgb(226, 232, 240),
+            ))
+            .corner_radius(8)
+            .inner_margin(egui::vec2(16.0, 16.0));
+
+        {
+            let doc_text = state.loro_doc.get_text("text");
+            let mut text_content = doc_text.to_string();
+
+            let output = editor_frame
+                .show(ui, |ui| {
+                    let front_layer_id = LayerId::new(ui.layer_id().order, ui.id().with("front"));
+                    ui.ctx().set_sublayer(ui.layer_id(), front_layer_id);
+
+                    ui.scope_builder(UiBuilder::new().layer_id(front_layer_id), |ui| {
+                        TextEdit::multiline(&mut text_content)
+                            .frame(false)
+                            .background_color(Color32::TRANSPARENT)
+                            .font(egui::FontId::new(18.0, egui::FontFamily::Proportional))
+                            .desired_width(f32::INFINITY)
+                            .desired_rows(20)
+                            .show(ui)
+                    })
+                    .inner
+                })
+                .inner;
+
+            render_peer_cursors(ui, &output, &state.awareness_cache, &state.loro_doc);
+
+            if state.egui_cursors_needs_update {
+                state.egui_cursors_needs_update = false;
+                update_egui_from_loro_cursors(
+                    ui,
+                    output.response.id,
+                    &state.loro_doc,
+                    &state.cursors,
+                );
+            } else {
+                let new_cursors = get_loro_cursors_from_egui(&output, &doc_text);
+                if new_cursors != state.cursors {
+                    state.cursors = new_cursors;
+                    let _ = broadcast_awareness(state);
+                }
+            }
+
+            if output.response.changed() {
+                let _ = doc_text.update(&text_content, Default::default());
+                state.loro_doc.commit();
+            }
         }
-    }
-
-    if text_edit.response.changed() {
-        let _ = doc_text.update(&text_content, Default::default());
-        state.loro_doc.commit();
-    }
+    });
 }
 
 fn update_egui_from_loro_cursors(
@@ -132,15 +248,6 @@ fn render_peer_cursors(
     let galley_pos = text_edit_output.galley_pos;
 
     for (endpoint_id, (awareness, _)) in awareness_cache.iter() {
-        ui.horizontal(|ui| {
-            if let Some((cursor_primary, cursor_secondary)) = &awareness.loro_cursors {
-                ui.label(format!("{:?}", loro_doc.get_cursor_pos(cursor_primary)));
-                ui.label(format!("{:?}", loro_doc.get_cursor_pos(cursor_secondary)));
-            } else {
-                ui.label("No cursors");
-            }
-        });
-
         if let Some((cursor_primary, cursor_secondary)) = &awareness.loro_cursors
             && let Ok(primary) = loro_doc.get_cursor_pos(cursor_primary)
             && let Ok(secondary) = loro_doc.get_cursor_pos(cursor_secondary)
