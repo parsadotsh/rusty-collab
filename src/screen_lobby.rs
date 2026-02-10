@@ -1,34 +1,30 @@
 use eframe::egui::Ui;
 
-use crate::State;
+use crate::{App, State, task_start_session::task_start_session};
 
-pub fn render_lobby(ui: &mut Ui, state: &mut State) {
-    let State::Lobby {
-        join_existing,
-        name_input,
-    } = state
-    else {
-        return;
-    };
+pub struct LobbyState {
+    pub join_existing: bool,
+    pub name_input: String,
+}
 
+pub fn render_lobby(ui: &mut Ui, app: App, state: &mut LobbyState) {
     ui.horizontal(|ui| {
-        ui.selectable_value(join_existing, false, "Create new session");
-        ui.selectable_value(join_existing, true, "Join existing session");
+        ui.selectable_value(&mut state.join_existing, false, "Create new session");
+        ui.selectable_value(&mut state.join_existing, true, "Join existing session");
     });
     ui.heading("Rusty Collab");
     ui.horizontal(|ui| {
         ui.label("Your name: ");
-        ui.text_edit_singleline(name_input);
+        ui.text_edit_singleline(&mut state.name_input);
     });
 
-    if !*join_existing {
+    if !state.join_existing {
         if ui.button("Create New Session").clicked() {
-            *state = State::Session { doc: String::new() };
-            return;
+            tokio::spawn(task_start_session(app));
         }
     } else {
         if ui.button("Join Existing Session").clicked() {
-            *state = State::Session { doc: String::new() };
+            tokio::spawn(task_start_session(app));
             return;
         }
     }

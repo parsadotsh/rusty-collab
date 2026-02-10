@@ -1,19 +1,15 @@
 use eframe::egui::{TextEdit, Ui};
 
-use crate::State;
+use crate::{App, task_leave_session::task_leave_session};
 
-pub fn render_session(ui: &mut Ui, state: &mut State) {
-    let State::Session { doc } = state else {
-        return;
-    };
+pub struct SessionState {
+    pub doc: String,
+}
 
+pub fn render_session(ui: &mut Ui, app: App, state: &mut SessionState) {
     if ui.button("Leave Session").clicked() {
-        *state = State::Lobby {
-            join_existing: false,
-            name_input: String::new(),
-        };
-        return;
+        tokio::spawn(task_leave_session(app));
     }
 
-    TextEdit::multiline(doc).show(ui);
+    TextEdit::multiline(&mut state.doc).show(ui);
 }
