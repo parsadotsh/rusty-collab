@@ -33,6 +33,7 @@ pub fn handle_gossip_message(
         }
         GossipMessage::Update { data } => {
             loro_doc.import(&data)?;
+            session_state.egui_cursors_needs_update = true;
             app.egui_ctx.request_repaint();
         }
         GossipMessage::Awareness(awareness) => {

@@ -1,23 +1,19 @@
-use core::time;
 use std::collections::HashMap;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, bail};
 use loro::cursor::Cursor;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
-use tokio::time::interval;
 
 use crate::App;
 use crate::gossip_message::GossipMessage;
 use crate::task_start_session::SessionState;
 
-const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
-const CLEANUP_INTERVAL: Duration = Duration::from_millis(500);
 const CACHE_TTL: Duration = Duration::from_secs(5);
 
 pub type IdBytes = [u8; 32];
 pub type AwarenessCache = HashMap<IdBytes, (Awareness, Instant)>;
+pub type LoroCursors = Option<(Cursor, Cursor)>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Awareness {
@@ -32,6 +28,19 @@ pub fn awareness_refresh(app: &App) -> Result<()> {
         bail!("Expected Session state");
     };
 
+    broadcast_awareness(session_state)?;
+
+    let instant_now = Instant::now();
+    session_state
+        .awareness_cache
+        .retain(|_, (_, received_at)| instant_now.duration_since(*received_at) < CACHE_TTL);
+
+    app.egui_ctx.request_repaint();
+
+    Ok(())
+}
+
+pub fn broadcast_awareness(session_state: &mut SessionState) -> Result<()> {
     let timestamp_now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -44,22 +53,15 @@ pub fn awareness_refresh(app: &App) -> Result<()> {
             timestamp_ms: timestamp_now,
         }))?;
 
-    let instant_now = Instant::now();
-    session_state
-        .awareness_cache
-        .retain(|_, (_, received_at)| instant_now.duration_since(*received_at) < CACHE_TTL);
-
-    app.egui_ctx.request_repaint();
-
     Ok(())
 }
 
-pub fn update_awareness_cache(state: &mut SessionState, awareness: Awareness) {
-    if awareness.endpoint_id == state.own_id {
+pub fn update_awareness_cache(session_state: &mut SessionState, awareness: Awareness) {
+    if awareness.endpoint_id == session_state.own_id {
         return;
     }
 
-    let old_entry = state.awareness_cache.get(&awareness.endpoint_id);
+    let old_entry = session_state.awareness_cache.get(&awareness.endpoint_id);
     let should_update = if let Some((existing, _)) = old_entry {
         awareness.timestamp_ms > existing.timestamp_ms
     } else {
@@ -67,7 +69,7 @@ pub fn update_awareness_cache(state: &mut SessionState, awareness: Awareness) {
     };
 
     if should_update {
-        state
+        session_state
             .awareness_cache
             .insert(awareness.endpoint_id, (awareness, Instant::now()));
     }

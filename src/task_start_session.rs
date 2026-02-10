@@ -16,7 +16,7 @@ use postcard::{from_bytes, to_allocvec as to_bytes};
 
 use crate::{
     App, State,
-    awareness::{AwarenessCache, IdBytes, awareness_refresh},
+    awareness::{AwarenessCache, IdBytes, LoroCursors, awareness_refresh},
     gossip_message::{GossipMessage, handle_gossip_message},
 };
 
@@ -34,8 +34,12 @@ pub struct SessionState {
     pub own_id: IdBytes,
     pub own_name: String,
 
+    pub cursors: LoroCursors,
+    pub egui_cursors_needs_update: bool,
+
     pub loro_doc: LoroDoc,
     pub loro_sub: loro::Subscription,
+
     pub iroh_endpoint: Endpoint,
     pub iroh_gossip: Gossip,
     pub iroh_router: Router,
@@ -117,6 +121,8 @@ async fn setup(app: &App, name: String, existing_peer: Option<String>) -> Result
     Ok(SessionState {
         own_id: iroh_endpoint.id().as_bytes().to_owned(),
         own_name: name,
+        cursors: None,
+        egui_cursors_needs_update: false,
         loro_doc,
         loro_sub,
         iroh_endpoint,
