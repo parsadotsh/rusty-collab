@@ -1,6 +1,6 @@
 use eframe::egui::Ui;
 
-use crate::{App, State, task_start_session::task_start_session};
+use crate::{App, task_start_session::task_start_session};
 
 pub struct LobbyState {
     pub join_existing: bool,

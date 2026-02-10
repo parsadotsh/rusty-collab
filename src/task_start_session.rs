@@ -100,12 +100,14 @@ async fn setup(app: &App, name: String, existing_peer: Option<String>) -> Result
                 select! {
                     Some(event) = gossip_topic.next() => {
                         if let Ok(Event::Received(message)) = event {
+                            println!("Received message: {:?}", &message.content);
                             let (_nonce, gossip_message): (u128, GossipMessage) = from_bytes(&message.content)?;
                             handle_gossip_message(gossip_message, &mut app, &loro_doc, &outbound_queue)?;
                         }
                     }
                     Some(message) = outbound_queue_rx.recv() => {
                         let bytes = to_bytes(&(rand::random::<u128>(), &message))?;
+                        println!("Sending message: {:?}", bytes);
                         gossip_topic.broadcast(bytes.into()).await?;
                     }
                     _ = awareness_interval.tick() => {

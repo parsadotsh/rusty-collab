@@ -19,6 +19,7 @@ pub type LoroCursors = Option<(Cursor, Cursor)>;
 pub struct Awareness {
     pub endpoint_id: IdBytes,
     pub name: String,
+    pub loro_cursors: Option<(Cursor, Cursor)>,
     pub timestamp_ms: u64,
 }
 
@@ -50,6 +51,7 @@ pub fn broadcast_awareness(session_state: &mut SessionState) -> Result<()> {
         .send(GossipMessage::Awareness(Awareness {
             endpoint_id: session_state.own_id,
             name: session_state.own_name.clone(),
+            loro_cursors: session_state.cursors.clone(),
             timestamp_ms: timestamp_now,
         }))?;
 
